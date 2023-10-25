@@ -48,7 +48,7 @@ def get_all_channels_data(channel_id):
                     Subscribers = response['items'][i]['statistics']['subscriberCount'],
                     Views = response['items'][i]['statistics']['viewCount'],
                     Total_videos = response['items'][i]['statistics']['videoCount'],
-                    Description = response['items'][i]['snippet']['description'],
+                    Description = response['items'][i]['snippet'].get('description'),
                     Country = response['items'][i]['snippet'].get('country')
                     )
         channel_data.append(data)
@@ -78,6 +78,8 @@ def get_video_ids(channel_id):
     return video_ids_all_channels
 video_ids = get_video_ids(channel_id)
 
+
+
 def get_video_details(video_ids):
     video_status = []
     for i in range(0, len(video_ids), 50):
@@ -90,7 +92,7 @@ def get_video_details(video_ids):
                                 Video_id = video['id'],
                                 Title = video['snippet']['title'],
                                 #Tags = video['snippet'].get('tags'),
-                                Thumbnail = video['snippet']['thumbnails']['default']['url'],
+                                # Thumbnail = video['snippet']['thumbnails']['default']['url'],
                                 Description = video['snippet']['description'],
                                 Published_date = video['snippet']['publishedAt'],
                                 Duration = parse_duration(video['contentDetails']['duration']).total_seconds() / 60,
@@ -103,53 +105,56 @@ def get_video_details(video_ids):
                                )
             video_status.append(video_details)
     return video_status
-def get_comment_details(video_ids):  
+
+def get_comment_details(video_ids):
     all_comments = []
     try:
-        for v_ids in range(len((video_ids))):
-                request = youtube.commentThreads().list(
-                    part="snippet,replies",
-                    videoId=video_ids[v_ids],
-                    maxResults = 50
-                )
-                response = request.execute()
-                for cmt in response['items']:
-                    all_comments.append({'Comment_id' : cmt['id'],
-                                        'Video_id' : cmt['snippet']['videoId'],
-                                        'Comment_text' : cmt['snippet']['topLevelComment']['snippet']['textDisplay'],
-                                        'Comment_author' : cmt['snippet']['topLevelComment']['snippet']['authorDisplayName'],
-                                        'Comment_posted_date' : cmt['snippet']['topLevelComment']['snippet']['publishedAt'],
-                                        'Like_count' : cmt['snippet']['topLevelComment']['snippet']['likeCount'],
-                                        'Reply_count' : cmt['snippet']['totalReplyCount']
-                                        })
-                next_Page_token = response.get('nextPageToken')
-                morePages = True
-                while morePages:
-                    if next_Page_token is None:
-                        morePages = False
-                    else:
-                        request = youtube.commentThreads().list(
-                            part="snippet,replies",
-                            videoId= video_ids[v_ids],
-                            maxResults = 50,
-                            pageToken=next_Page_token
-                            )
-                        response = request.execute()
-                        for i in range(len(response['items'])):
-                            all_comments.append({'Comment_id' :cmt['id'],
-                                                'Video_id' :cmt['snippet']['videoId'],
-                                                'Comment_text' :cmt['snippet']['topLevelComment']['snippet']['textDisplay'],
-                                                'Comment_author' :cmt['snippet']['topLevelComment']['snippet']['authorDisplayName'],
-                                                'Comment_posted_date' :cmt['snippet']['topLevelComment']['snippet']['publishedAt'],
-                                                'Like_count' :cmt['snippet']['topLevelComment']['snippet']['likeCount'],
-                                                'Reply_count' :cmt['snippet']['totalReplyCount']
-                                                })
+        for v_ids in video_ids:
+            request = youtube.commentThreads().list(
+                part="snippet,replies",
+                videoId=v_ids,
+                maxResults = 50
+            )
+            response = request.execute()
+            for cmt in response['items']:
+                all_comments.append({'Comment_id' : cmt['id'],
+                                    'Video_id' : cmt['snippet']['videoId'],
+                                    'Comment_text' : cmt['snippet']['topLevelComment']['snippet']['textDisplay'],
+                                    'Comment_author' : cmt['snippet']['topLevelComment']['snippet']['authorDisplayName'],
+                                    'Comment_posted_date' : cmt['snippet']['topLevelComment']['snippet']['publishedAt'],
+                                    'Like_count' : cmt['snippet']['topLevelComment']['snippet']['likeCount'],
+                                    'Reply_count' : cmt['snippet']['totalReplyCount']
+                                    })
+            next_Page_token = response.get('nextPageToken')
+            morePages = True
+            while morePages:
+                if next_Page_token is None:
+                    morePages = False
+                else:
+                    request = youtube.commentThreads().list(
+                        part="snippet,replies",
+                        videoId= v_ids,
+                        maxResults = 50,
+                        pageToken=next_Page_token
+                        )
+                    response = request.execute()
+                    for cmt in range(len(response['items'])):
+                        all_comments.append({'Comment_id' :cmt['id'],
+                                            'Video_id' :cmt['snippet']['videoId'],
+                                            'Comment_text' :cmt['snippet']['topLevelComment']['snippet']['textDisplay'],
+                                            'Comment_author' :cmt['snippet']['topLevelComment']['snippet']['authorDisplayName'],
+                                            'Comment_posted_date' :cmt['snippet']['topLevelComment']['snippet']['publishedAt'],
+                                            'Like_count' :cmt['snippet']['topLevelComment']['snippet']['likeCount'],
+                                            'Reply_count' :cmt['snippet']['totalReplyCount']
+                                            })
     except:
         pass
     return all_comments
 
+comment_extract = get_comment_details(video_ids)
+
 my_mongodb_connection = pymongo.MongoClient('mongodb://localhost:27017')
-my_mongo_database = my_mongodb_connection['dw58_dw59_data_analysis']
+my_mongo_database = my_mongodb_connection['Project_1_Yt_Data_Warehose']
 
 def fetch_channel_name():
     channel_name = []
@@ -159,22 +164,22 @@ def fetch_channel_name():
 
 def comments():
     comment = []
-    for i in get_video_ids(channel_id):
-        comment += get_comment_details(i)
+    for i in comment_extract:
+        comment.append(i)
     return comment
 
 my_sql_connection = mysql.connector.connect(host = 'localhost', user = 'root', password='1234')
 mycursor = my_sql_connection.cursor()
-#mycursor.execute('create database Guvi_Youtube_Project')
-mycursor.execute('use Guvi_Youtube_Project')
+# mycursor.execute('create database Project_1_Yt_Data')
+mycursor.execute('use Project_1_Yt_Data')
 
 def adding_collection_to_mongodb():
     mycollection_1 = my_mongo_database['channel_details']
     mycollection_1.insert_many(get_all_channels_data(channel_id))
     mycollection_2 = my_mongo_database['video_details']
     mycollection_2.insert_many(get_video_details(video_ids))
-    # mycollection_3 = my_mongo_database['comment_details']
-    # mycollection_3.insert_many(comments())
+    mycollection_3 = my_mongo_database['comment_details']
+    mycollection_3.insert_many(comments())
 
 if selected == 'Upload data to MongoDB':
     st.header("*****Enter your Channel_Id*****")
@@ -198,14 +203,29 @@ if selected == 'SQL Data Transform':
 
     def videos_insertion():
                 col_2 = my_mongo_database['video_details']
-                query_2 = "insert into videos(Channel_name,Channel_id,Video_id,Title,Thumbnail,Description,Published_date,Duration,Views,Likes,Comments,Favorite_count,Definition,Caption_status) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+                query_2 = "insert into videos(Channel_name,Channel_id,Video_id,Title,Description,Published_date,Duration,Views,Likes,Comments,Favorite_count,Definition,Caption_status) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
                 for video in col_2.find({"Channel_name" : Input},{'_id' : 0}):
-                    mycursor.execute(query_2,tuple(video.values()))
+                    values = (
+                                video.get("Channel_name"),
+                                video.get("Channel_id"),
+                                video.get("Video_id"),
+                                video.get("Title"),
+                                video.get("Description"),
+                                video.get("Published_date"),
+                                video.get("Duration"),
+                                video.get("Views"),
+                                video.get("Likes"),
+                                video.get("Comments"),
+                                video.get("Favorite_count"),
+                                video.get("Definition"),
+                                video.get("Caption_status")
+                            )
+                    mycursor.execute(query_2,values)
                     my_sql_connection.commit()
 
     def comments_insertion():
                 col_2 = my_mongo_database['video_details']
-                col_3 = my_mongo_database['comments_details']
+                col_3 = my_mongo_database['comment_details']
                 query_3 = "insert into comments(Comment_id,Video_id,Comment_text,Comment_author,Comment_posted_date,Like_count,Reply_count) values(%s,%s,%s,%s,%s,%s,%s)"
                 for videos in col_2.find({"Channel_name" : Input},{'_id' : 0}):
                     for comment in col_3.find({'Video_id': videos['Video_id']},{'_id' : 0}):
@@ -216,6 +236,7 @@ if selected == 'SQL Data Transform':
         channels_insertion()
         videos_insertion()
         comments_insertion()
+        
         st.success("Transform to sql is done successfully !!")
 if selected == 'Queries':
     def name_of_all_videos():
